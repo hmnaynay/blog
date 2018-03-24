@@ -1,0 +1,13 @@
+{% macro show_post(post, i=None) -%}
+<div class="container box">
+  {% if i is not none %}
+    <a href="{{ url_for('post', i=i) }}">
+      <h2 class="title is-2">{{post.title}}</h2>
+    </a>
+  {% else %}
+    <h2 class="title is-2">{{post.title}}</h2>
+  {% endif %}
+  <p class="subtitle has-text-right has-text-muted">{{post.date}}</p>
+  <p>{{post.content}}</p>
+</div>
+{%- endmacro %}

@@ -1,0 +1,28 @@
+{% extends "base.jinja" %}
+{% block title %}
+    New Post
+{% endblock %}
+
+{% block body%}
+
+<form class="container box" action="{{url_for("new")}}" method="post">
+  <div class="field">
+      <div class="control">
+        <input name="title" class="input" type="text" placeholder="Title">
+      </div>
+  </div>
+
+  <div class="field">
+      <div class="control">
+        <textarea name="content" class="textarea" placeholder="10 lines of textarea" rows="10">
+        </textarea>
+      </div>
+  </div>
+
+  <div class="field">
+      <div class="control">
+          <button class="button is-primary" type="submit" name="button">Post</button>
+      </div>
+  </div>
+</form>
+{% endblock %}

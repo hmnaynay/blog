@@ -1,0 +1,23 @@
+{% extends "base.jinja" %}
+{% from "macros.jinja" import show_post %}
+
+{% block title %}
+    Naomi's Blog
+{% endblock %}
+
+{% block body %}
+<a href="/new" class="subtitle level-right is-link">
+  New Post
+</a>
+<br />
+
+{% for i in range(posts|length) %}
+  {{ show_post(posts[i]) }}
+{% else %}
+  <div class="container box">
+    <h2 class="subtitle">No posts yet. Please check back later.</h2>
+  </div>
+{% endfor %}
+
+
+{% endblock %}

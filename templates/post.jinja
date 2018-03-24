@@ -1,0 +1,15 @@
+{% extends "base.jinja" %}
+{% from "macros.jinja" import show_post %}
+
+{% block title %}
+    Naomi's Blog
+{% endblock %}
+
+{% block body %}
+<a href="/new" class="subtitle level-right is-link">
+  New Post
+</a>
+<br />
+
+{{ show_post(post) }}
+{% endblock %}
