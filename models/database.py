@@ -1,35 +1,164 @@
-from collections import defaultdict
-db = defaultdict(list)
+#!/usr/bin/env python3
+"""
+Minimal ORM for Mongodb
 
-class Model(object):
-    """
-    Simple base class for data models.
-    """
-    def __init__(self, id):
-        self.__dict__['id'] = id
+:author: Luke Southam <luke@devthe.com>
+"""
 
-    def __init_subclass__(cls, table=None):
-        if table is None:
-            raise KeyError
-        cls._table = db[table]
+import os
+from pymongo import MongoClient
+from gridfs import GridFS
+
+client = MongoClient(os.environ.get('MONGODB_URI', 'localhost'))
+db = client[os.environ.get('MONGODB_NAME', 'blog')]
+fs = GridFS(db)
+
+class ValidationError(Exception):
+    @classmethod
+    def not_provided(cls, key):
+        return cls("'{}' not provided.".format(key))
+
+
+def make_spec(schema, **kwargs):
+    """
+    Generate spec from schema and values.
+
+    :param schema: list of spec keys
+    :param kwargs: spec keys and values
+    :return: spec dict
+    """
+    # A _id value must be given if in schema.
+    if '_id' in schema and kwargs.get('_id') is None:
+        raise ValidationError.not_provided('_id')
+
+    spec = dict()
+    for k in schema:
+        # Support for embedded documents.
+        if isinstance(k, dict):
+            for embedded, fields in k.items():
+                if kwargs.get(embedded) is not None:
+                    spec[embedded] = make_spec(fields, **kwargs[embedded])
+
+        # Only add item if a value is given.
+        elif kwargs.get(k) is not None:
+            spec[k] = kwargs[k]
+
+    # Allow lookup by ObjectID
+    if '_id' in kwargs:
+        spec['_id'] = kwargs['_id']
+
+    return spec
+
+
+class Document(object):
+    """
+    Mongodb document management.
+
+    Inherit from this and set:
+        _collection: The mongodb collection (from pymongo)
+        _schema: The collection schema (list of fields)
+        _check: List of fields that must have values when inserted.
+        _format_new: ran on spec before a new document is inserted (staticmethod)
+    """
+
+    # spec = make_spec
+    spec = classmethod(lambda cls, **kwargs: make_spec(cls._schema, **kwargs))
+    _check = []
 
     @classmethod
-    def new(cls, **data):
-        cls._table.append(data)
-        id = cls._table.index(data)
-        return cls(id)
+    def new(cls, **kwargs):
+        """
+        Insert new document.
+
+        :param kwargs: values
+        :return: Document instance
+        """
+        try:
+            kwargs = cls._format_new(**kwargs)
+        except KeyError as e:
+            raise ValidationError.not_provided(e.args[0])
+
+        for field in cls._check:
+            if field not in kwargs:
+                raise ValidationError.not_provided(field)
+
+        spec = cls.spec(**kwargs)
+
+        _id = cls._collection.insert(spec)
+        return cls(_id)
+
+    @staticmethod
+    def _format_new(**kwargs):
+        return kwargs
+
+    def __init__(self, _id=None, _doc=None, **kwargs):
+        if isinstance(_id, dict):
+            _doc = _id
+
+        if _doc is not None:
+            self._doc = _doc
+            return
+
+        if _id is not None:
+            kwargs['_id'] = _id
+
+        spec = self.spec(**kwargs)
+        self._doc = self._collection.find_one(spec)
 
     @classmethod
-    def get_all(cls):
-        return cls._table
+    def find(cls, _sort=False, **kwargs):
+        spec = cls.spec(**kwargs)
+        docs = cls._collection.find(spec)
+        if _sort:
+            docs = docs.sort(*_sort)
 
-    def __getattr__(self, key):
-        return self._table[self.id][key]
+        return [cls(doc) for doc in docs]
 
-    def __setattr__(self, key, value):
-        self._table[self.id][key] = value
+    @classmethod
+    def find_(cls, *args, **kwargs):
+        return list(map(cls, cls._collection.find(*args, **kwargs)))
 
-    def __repr__(self):
-        return "<%s id='%d' at %s>" % (
-            self.__class__.__name__, self.id, id(self)
+    @classmethod
+    def find_one(cls, **kwargs):
+        spec = cls.spec(**kwargs)
+        doc = cls._collection.find_one(spec)
+        return cls(doc)
+
+    def __getitem__(self, item):
+        return self._doc[item]
+
+    def __setitem__(self, item, value):
+        self._doc[item] = value
+
+    @property
+    def id(self):
+        return self._doc['_id']
+
+    def update(self, _set=None, _inc=None):
+        if _set is None and _inc is None:
+            _set = self._doc
+
+        update = {}
+        if _set is not None:
+            update['$set'] = _set
+        if _inc is not None:
+            update['$inc'] = _inc
+
+        res = self._collection.update(
+            {'_id': self.id},
+            update
         )
+        self._doc = self.__class__(self.id)._doc
+        return res
+
+    @property
+    def exists(self):
+        return self._doc is not None
+
+    def delete(self):
+        self._collection.delete_one({'_id': self.id})
+        self._doc = None
+
+    def __iter__(self):
+        for k, v in self._doc.items():
+            yield k, v

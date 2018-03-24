@@ -11,8 +11,8 @@
 </a>
 <br />
 
-{% for i in range(posts|length) %}
-  {{ show_post(posts[i]) }}
+{% for post in posts %}
+  {{ show_post(post) }}
 {% else %}
   <div class="container box">
     <h2 class="subtitle">No posts yet. Please check back later.</h2>
